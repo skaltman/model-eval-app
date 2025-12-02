@@ -3,6 +3,7 @@
 library(shiny)
 library(bslib)
 library(gt)
+library(purrr)
 
 # Source helper functions (plotting and data helpers)
 source("R/helpers.R")
@@ -21,35 +22,49 @@ available_models <- get_available_models(are_eval_full)
 
 # Add provider info and sort by provider, then by release date (most recent first)
 available_models_with_provider <- available_models |>
-  left_join(model_info |> select(model_join, provider, release_date), by = "model_join") |>
+  left_join(
+    model_info |> select(model_join, provider, release_date),
+    by = "model_join"
+  ) |>
   arrange(provider, desc(release_date))
 
 # Models to select at startup
-default_selected <- c("opus_4_5", "haiku_4_5_thinking", "sonnet_4_5_thinking",
-                      "gemini_3", "gpt_5_1", "gpt_5")
+default_selected <- c(
+  "opus_4_5",
+  "haiku_4_5_thinking",
+  "sonnet_4_5_thinking",
+  "gemini_3",
+  "gpt_5_1",
+  "gpt_5"
+)
 
 # Build checkbox UI with provider headers
-checkbox_ui <- tagList(
-  p(strong("Select models to compare:")),
-  lapply(split(available_models_with_provider, available_models_with_provider$provider), function(provider_df) {
+checkbox_ui <- available_models_with_provider |>
+  dplyr::group_split(provider) |>
+  purrr::map(\(provider_df) {
     tagList(
-      h6(unique(provider_df$provider), style = "margin-top: 10px; margin-bottom: 5px; color: #2c3e50; font-weight: 600;"),
+      h6(
+        unique(provider_df$provider),
+        style = "margin-top: 10px; margin-bottom: 5px; color: #2c3e50; font-weight: 600;"
+      ),
       div(
         style = "margin-top: -10px;",
-        lapply(seq_len(nrow(provider_df)), function(i) {
-          div(
+        purrr::map2(
+          provider_df$model_join,
+          provider_df$model_display,
+          \(join, display) div(
             style = "margin-bottom: -10px;",
             checkboxInput(
-              inputId = paste0("model_", provider_df$model_join[i]),
-              label = provider_df$model_display[i],
-              value = provider_df$model_join[i] %in% default_selected
+              inputId = paste0("model_", join),
+              label = display,
+              value = join %in% default_selected
             )
           )
-        })
+        )
       )
     )
-  })
-)
+  }) |>
+  tagList()
 
 # UI -------------------------------------------------------------------------
 
@@ -62,7 +77,7 @@ ui <- page_navbar(
     "Results",
     page_sidebar(
       sidebar = sidebar(
-        title = "Model Selection",
+        title = "Select models",
         width = 300,
 
         checkbox_ui,
@@ -174,15 +189,17 @@ server <- function(input, output, session) {
 
   # Select/Clear all buttons
   observeEvent(input$select_all, {
-    lapply(available_models_with_provider$model_join, function(model) {
-      updateCheckboxInput(session, paste0("model_", model), value = TRUE)
-    })
+    purrr::walk(
+      available_models_with_provider$model_join,
+      \(model) updateCheckboxInput(session, paste0("model_", model), value = TRUE)
+    )
   })
 
   observeEvent(input$clear_all, {
-    lapply(available_models_with_provider$model_join, function(model) {
-      updateCheckboxInput(session, paste0("model_", model), value = FALSE)
-    })
+    purrr::walk(
+      available_models_with_provider$model_join,
+      \(model) updateCheckboxInput(session, paste0("model_", model), value = FALSE)
+    )
   })
 
   # Outputs ---------------------------------------------------------------------
