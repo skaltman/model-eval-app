@@ -14,10 +14,42 @@ app_data <- readr::read_rds("data/app_data.rds")
 
 are_eval_full <- app_data$eval_data
 are_costs <- app_data$cost_data
-model_prices <- app_data$model_prices
+model_info <- app_data$model_info
 
 # Get available models
 available_models <- get_available_models(are_eval_full)
+
+# Add provider info and sort by provider, then by release date (most recent first)
+available_models_with_provider <- available_models |>
+  left_join(model_info |> select(model_join, provider, release_date), by = "model_join") |>
+  arrange(provider, desc(release_date))
+
+# Models to select at startup
+default_selected <- c("opus_4_5", "haiku_4_5_thinking", "sonnet_4_5_thinking",
+                      "gemini_3", "gpt_5_1", "gpt_5")
+
+# Build checkbox UI with provider headers
+checkbox_ui <- tagList(
+  p(strong("Select models to compare:")),
+  lapply(split(available_models_with_provider, available_models_with_provider$provider), function(provider_df) {
+    tagList(
+      h6(unique(provider_df$provider), style = "margin-top: 10px; margin-bottom: 5px; color: #2c3e50; font-weight: 600;"),
+      div(
+        style = "margin-top: -10px;",
+        lapply(seq_len(nrow(provider_df)), function(i) {
+          div(
+            style = "margin-bottom: -10px;",
+            checkboxInput(
+              inputId = paste0("model_", provider_df$model_join[i]),
+              label = provider_df$model_display[i],
+              value = provider_df$model_join[i] %in% default_selected
+            )
+          )
+        })
+      )
+    )
+  })
+)
 
 # UI -------------------------------------------------------------------------
 
@@ -33,15 +65,7 @@ ui <- page_navbar(
         title = "Model Selection",
         width = 300,
 
-        checkboxGroupInput(
-          "selected_models",
-          "Select models to compare:",
-          choices = setNames(
-            available_models$model_join,
-            available_models$model_display
-          ),
-          selected = available_models$model_join[1:5]
-        ),
+        checkbox_ui,
 
         hr(),
 
@@ -120,40 +144,45 @@ ui <- page_navbar(
 # Server ---------------------------------------------------------------------
 
 server <- function(input, output, session) {
+  # Reactive: Collect selected models from individual checkboxes
+  selected_models <- reactive({
+    available_models_with_provider$model_join[
+      sapply(available_models_with_provider$model_join, function(model) {
+        input[[paste0("model_", model)]]
+      })
+    ]
+  })
+
   # Reactive: Filtered evaluation data
   filtered_eval <- reactive({
-    req(input$selected_models)
+    req(length(selected_models()) > 0)
 
     are_eval_full |>
-      filter(model_join %in% input$selected_models)
+      filter(model_join %in% selected_models())
   })
 
   # Reactive: Summary statistics
   eval_summary <- reactive({
-    req(input$selected_models)
+    req(length(selected_models()) > 0)
 
     compute_summary_stats(
       are_eval_full,
       are_costs,
-      input$selected_models
+      selected_models()
     )
   })
 
   # Select/Clear all buttons
   observeEvent(input$select_all, {
-    updateCheckboxGroupInput(
-      session,
-      "selected_models",
-      selected = available_models$model_join
-    )
+    lapply(available_models_with_provider$model_join, function(model) {
+      updateCheckboxInput(session, paste0("model_", model), value = TRUE)
+    })
   })
 
   observeEvent(input$clear_all, {
-    updateCheckboxGroupInput(
-      session,
-      "selected_models",
-      selected = character(0)
-    )
+    lapply(available_models_with_provider$model_join, function(model) {
+      updateCheckboxInput(session, paste0("model_", model), value = FALSE)
+    })
   })
 
   # Outputs ---------------------------------------------------------------------
@@ -177,7 +206,7 @@ server <- function(input, output, session) {
     req(nrow(eval_summary()) > 0)
 
     eval_summary() |>
-      left_join(model_prices, by = "model_join") |>
+      left_join(model_info, by = "model_join") |>
       arrange(desc(percent_correct)) |>
       select(
         Model = model_display,
