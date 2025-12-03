@@ -52,14 +52,16 @@ checkbox_ui <- available_models_with_provider |>
         purrr::map2(
           provider_df$model_join,
           provider_df$model_display,
-          \(join, display) div(
-            style = "margin-bottom: -10px;",
-            checkboxInput(
-              inputId = paste0("model_", join),
-              label = display,
-              value = join %in% default_selected
+          \(join, display) {
+            div(
+              style = "margin-bottom: -10px;",
+              checkboxInput(
+                inputId = paste0("model_", join),
+                label = display,
+                value = join %in% default_selected
+              )
             )
-          )
+          }
         )
       )
     )
@@ -70,7 +72,6 @@ checkbox_ui <- available_models_with_provider |>
 
 ui <- page_navbar(
   title = "How well do LLMs generate R code?",
-  theme = bs_theme(version = 5, bootswatch = "flatly"),
   id = "main_nav",
 
   nav_panel(
@@ -96,14 +97,6 @@ ui <- page_navbar(
           class = "btn-sm btn-outline-secondary",
           width = "48%"
         ),
-
-        hr(),
-
-        p(
-          class = "text-muted small",
-          "This app displays evaluation results from the vitals package, ",
-          "comparing LLM performance on R code generation tasks."
-        )
       ),
 
       navset_card_tab(
@@ -118,7 +111,7 @@ ui <- page_navbar(
         ),
 
         nav_panel(
-          "Cost vs Performance",
+          "Cost vs. Performance",
           card(
             card_header("Model Performance vs. Cost"),
             card_body(
@@ -152,6 +145,16 @@ ui <- page_navbar(
         includeMarkdown("about.md")
       ),
       NULL
+    )
+  ),
+
+  nav_spacer(),
+
+  nav_item(
+    tags$a(
+      shiny::icon("github", style = "font-size: 1.5em;"),
+      href = "https://github.com/skaltman/model-eval-app",
+      target = "_blank"
     )
   )
 )
@@ -191,14 +194,18 @@ server <- function(input, output, session) {
   observeEvent(input$select_all, {
     purrr::walk(
       available_models_with_provider$model_join,
-      \(model) updateCheckboxInput(session, paste0("model_", model), value = TRUE)
+      \(model) {
+        updateCheckboxInput(session, paste0("model_", model), value = TRUE)
+      }
     )
   })
 
   observeEvent(input$clear_all, {
     purrr::walk(
       available_models_with_provider$model_join,
-      \(model) updateCheckboxInput(session, paste0("model_", model), value = FALSE)
+      \(model) {
+        updateCheckboxInput(session, paste0("model_", model), value = FALSE)
+      }
     )
   })
 
@@ -222,64 +229,7 @@ server <- function(input, output, session) {
   output$pricing_table <- render_gt({
     req(nrow(eval_summary()) > 0)
 
-    eval_summary() |>
-      left_join(model_info, by = "model_join") |>
-      arrange(desc(percent_correct)) |>
-      select(
-        Model = model_display,
-        `Input (per 1M tokens)` = Input,
-        `Output (per 1M tokens)` = Output,
-        `Input Tokens Used` = input,
-        `Output Tokens Used` = output,
-        `Total Cost` = price,
-        `% Correct` = percent_correct
-      ) |>
-      gt() |>
-      fmt_currency(
-        columns = c(
-          `Input (per 1M tokens)`,
-          `Output (per 1M tokens)`,
-          `Total Cost`
-        ),
-        currency = "USD",
-        decimals = 2
-      ) |>
-      fmt_number(
-        columns = c(`Input Tokens Used`, `Output Tokens Used`),
-        decimals = 0,
-        use_seps = TRUE
-      ) |>
-      fmt_percent(
-        columns = `% Correct`,
-        decimals = 1
-      ) |>
-      cols_align(
-        align = "left",
-        columns = everything()
-      ) |>
-      tab_header(
-        title = "Model Pricing and Performance Details",
-        subtitle = "Sorted by percent correct (descending)"
-      ) |>
-      data_color(
-        columns = `% Correct`,
-        palette = c("#ef8a62", "#f6e8c3", "#6caea7"),
-        domain = NULL
-      ) |>
-      data_color(
-        columns = `Total Cost`,
-        palette = c("#e8f4f8", "#a8d5e2", "#6baed6", "#3182bd", "#08519c"),
-        domain = NULL
-      ) |>
-      tab_options(
-        table.font.size = px(14),
-        heading.title.font.size = px(18),
-        heading.subtitle.font.size = px(14),
-        column_labels.font.weight = "bold",
-        ihtml.use_pagination = FALSE,
-        ihtml.use_page_size_select = FALSE,
-        table.width = pct(100)
-      )
+    create_pricing_table(eval_summary(), model_info)
   })
 }
 
