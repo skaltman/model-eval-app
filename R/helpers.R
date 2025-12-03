@@ -130,3 +130,71 @@ plot_cost_vs_performance <- function(summary_data) {
       axis.text = element_text(size = 12)
     )
 }
+
+# Table Functions ------------------------------------------------------------
+
+#' Create pricing and performance table
+#'
+#' @param summary_data Summary statistics with percent_correct, price, and token usage
+#' @param model_info Model metadata with pricing information
+#' @return gt table object
+create_pricing_table <- function(summary_data, model_info) {
+  summary_data |>
+    left_join(model_info, by = "model_join") |>
+    arrange(desc(percent_correct)) |>
+    select(
+      Model = model_display,
+      `Input (per 1M tokens)` = Input,
+      `Output (per 1M tokens)` = Output,
+      `Input Tokens Used` = input,
+      `Output Tokens Used` = output,
+      `Total Cost` = price,
+      `% Correct` = percent_correct
+    ) |>
+    gt::gt() |>
+    gt::fmt_currency(
+      columns = c(
+        `Input (per 1M tokens)`,
+        `Output (per 1M tokens)`,
+        `Total Cost`
+      ),
+      currency = "USD",
+      decimals = 2
+    ) |>
+    gt::fmt_number(
+      columns = c(`Input Tokens Used`, `Output Tokens Used`),
+      decimals = 0,
+      use_seps = TRUE
+    ) |>
+    gt::fmt_percent(
+      columns = `% Correct`,
+      decimals = 1
+    ) |>
+    gt::cols_align(
+      align = "left",
+      columns = everything()
+    ) |>
+    gt::tab_header(
+      title = "Model Pricing and Performance Details",
+      subtitle = "Sorted by percent correct (descending)"
+    ) |>
+    gt::data_color(
+      columns = `% Correct`,
+      palette = c("#ef8a62", "#f6e8c3", "#6caea7"),
+      domain = NULL
+    ) |>
+    gt::data_color(
+      columns = `Total Cost`,
+      palette = c("#e8f4f8", "#a8d5e2", "#6baed6", "#3182bd", "#08519c"),
+      domain = NULL
+    ) |>
+    gt::tab_options(
+      table.font.size = gt::px(14),
+      heading.title.font.size = gt::px(18),
+      heading.subtitle.font.size = gt::px(14),
+      column_labels.font.weight = "bold",
+      ihtml.use_pagination = FALSE,
+      ihtml.use_page_size_select = FALSE,
+      table.width = gt::pct(100)
+    )
+}
