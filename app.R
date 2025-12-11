@@ -140,7 +140,7 @@ ui <- page_navbar(
       NULL,
       div(
         style = "padding-top: 20px;",
-        h2("About This Evaluation"),
+        h2("About this evaluation"),
         includeMarkdown("about.md")
       ),
       NULL
