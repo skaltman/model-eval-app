@@ -1,5 +1,3 @@
-## Overview
-
 This app displays evaluation results comparing how well various LLMs generate R code. 
 
 ## Methodology
